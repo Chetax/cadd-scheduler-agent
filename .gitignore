@@ -1,0 +1,7 @@
+backend/venv
+backend/app/api/credentials.json
+backend/app/api/token.json
+backend/app/api/event_token.json
+backend/app/api/Gmeet_token.json
+.env
+__pycache__
