@@ -1,4 +1,4 @@
-# 🗓️ calender-agent — Agentic Meeting Negotiation, Native to Slack & Teams
+# 🗓️ Cadd-Scheduler — Agentic Meeting Negotiation, Native to Slack & Teams
 
 > Stop scheduling. Just @mention the bot.
 > An agentic system that finds a meeting slot across a team, negotiates around conflicts person-by-person inside Slack/Teams DMs, and locks a final Google Meet — with zero email back-and-forth.
