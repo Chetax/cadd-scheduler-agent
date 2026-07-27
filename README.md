@@ -185,7 +185,7 @@ concurai/
 
 ## Roadmap
 
-- [] Slack app: OAuth install + DM negotiation cards
+- [ ] Slack app: OAuth install + DM negotiation cards
 - [ ] AgentCore Runtime deployment of the 6-agent crew
 - [ ] Step Functions negotiation state machine
 - [x] Google Calendar + Google Meet integration
