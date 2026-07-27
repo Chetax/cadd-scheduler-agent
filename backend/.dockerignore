@@ -1,0 +1,31 @@
+# Secrets — must never enter the build context
+.env
+.env.*
+!.env.example
+**/credentials.json
+**/token.json
+**/event_token.json
+**/Gmeet_token.json
+
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Git & docs (not needed inside the image)
+.git/
+.gitignore
+docs/
+*.md
+
+# Local dev / IDE
+.vscode/
+.idea/
+*.log
+dump.rdb
+
+# Archive of old code — never ship this
+archive/
