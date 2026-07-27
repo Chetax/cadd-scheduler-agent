@@ -5,3 +5,148 @@ backend/app/api/event_token.json
 backend/app/api/Gmeet_token.json
 .env
 __pycache__
+
+# =========================================
+# Secrets & credentials 
+# =========================================
+.env
+.env.*
+!.env.example
+backend/venv
+**/credentials.json
+**/token.json
+**/event_token.json
+**/Gmeet_token.json
+**/*_token.json
+**/*.pem
+**/*.key
+**/service-account*.json
+**/gcp-*.json
+
+# =========================================
+# Python (backend)
+# =========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/venv/
+backend/env/
+venv/
+env/
+ENV/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Jupyter (if any exploratory notebooks)
+.ipynb_checkpoints/
+
+# =========================================
+# Node / React / Vite (frontend)
+# =========================================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+*.local
+
+# TypeScript build info
+*.tsbuildinfo
+
+# =========================================
+# AWS / CDK / Infra
+# =========================================
+infra/cdk/cdk.out/
+infra/cdk/.cdk.staging/
+infra/**/cdk.context.json
+.aws-sam/
+samconfig.toml
+*.zip
+
+# =========================================
+# Databases / local runtime artifacts
+# =========================================
+*.rdb
+dump.rdb
+*.sqlite3
+*.db
+*.log
+logs/
+
+# =========================================
+# Archive of old code 
+# =========================================
+archive/**/*.json
+!archive/**/package.json
+!archive/**/package-lock.json
+!archive/**/tsconfig*.json
+
+# =========================================
+# OS files
+# =========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =========================================
+# Editor / IDE
+# =========================================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# =========================================
+# Docker
+# =========================================
+.docker/
+docker-compose.override.yml
+docker-compose.*.local.yml
+*.pid
+# Named volumes data if ever bind-mounted locally
+docker-data/
+ 
+# =========================================
+# Misc
+# =========================================
+*.bak
+*.tmp
+.env.backup
