@@ -77,7 +77,7 @@ def get_free_busy(payload:EventExtract):
 
 def main():
 
-    email = "chetan@consultadd.com"
+    email = "enteryouremail"
     
     start_time = "2025-12-17T00:00:00Z"
     end_time   = "2025-12-17T23:59:59Z"
