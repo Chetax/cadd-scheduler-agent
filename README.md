@@ -11,7 +11,7 @@ Scheduling a meeting with 4+ people is still "reply-all with your availability."
 
 ## The Idea
 
-1. Someone @mentions the bot in a Slack/Teams channel: `@ConcurAI schedule with @alex @jordan @sam next week`
+1. Someone @mentions the bot in a Slack/Teams channel: `@cadd schedule with @alex @jordan @sam next week`
 2. Agents check everyone's calendar and propose a slot
 3. Each person gets a **DM** with an interactive card — Accept / Suggest another time — not an email
 4. If someone conflicts, a **Negotiation Agent** works that person 1:1 in their DM until they land on something that still works for everyone else
