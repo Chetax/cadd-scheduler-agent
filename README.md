@@ -152,24 +152,13 @@ COLLECTING_RESPONSES  (DM cards sent, tracking accept/decline per person)
 ## Repo Structure
 
 ```
-concurai/
-├── agents/
-│   ├── orchestrator/           # Step Functions state machine + entrypoint
-│   ├── availability_agent/     # Google/Outlook calendar free-busy logic
-│   ├── negotiation_agent/      # 1:1 DM negotiation logic
-│   ├── consensus_agent/        # Round tracking, escalation rules
-│   ├── meet_agent/             # Google Meet / Teams meeting creation
-│   └── notifier_agent/         # Slack/Teams thread updates + SES invite
-│
-├── integrations/
-│   ├── slack/                  # Bolt app, Block Kit cards, OAuth install
-│   ├── teams/                  # Bot Framework adapter, Adaptive Cards
-│   ├── google_calendar/
-│   └── outlook_calendar/
-│
-├── infra/                      # AWS CDK — AgentCore, Step Functions, DynamoDB,
-│                                # Lambda, API Gateway, Cognito, SES, EventBridge
-│
+
+cadd-scheduler-agent/
+├── backend/                    # FastAPI app — agents, API, Slack/Teams/Calendar integrations
+|
+├── infra/                      # AWS CDK — AgentCore, Step Functions, DynamoDB, Lambda,
+|                               # API Gateway, Cognito, SES, EventBridge
+|                            
 ├── frontend/                   # React dashboard — meeting history, org settings
 │
 └── docs/
