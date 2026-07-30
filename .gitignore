@@ -150,3 +150,5 @@ docker-data/
 *.bak
 *.tmp
 .env.backup
+*_token.json
+credentials.json
