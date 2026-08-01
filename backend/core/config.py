@@ -28,5 +28,8 @@ class Settings(BaseSettings):
     # AWS
     aws_region: str = "us-east-1"
 
+    # AgentCore
+    callback_url: str  # ← add this
+
 
 settings = Settings()

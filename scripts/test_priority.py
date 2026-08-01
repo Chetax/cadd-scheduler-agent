@@ -1,48 +1,45 @@
 """
-Priority test — proves the per-user-token model works.
+Priority test — proves the AgentCore-Identity-backed credential model works.
 
-Load ACTING_USER's token → create meeting inviting ATTENDEES →
-event lands on their calendars only; Chetan's personal is untouched.
+Fetches ACTING_EMAIL's credentials from AgentCore Identity vault →
+creates a meeting inviting ATTENDEES → event lands on their calendars only;
+Chetan's personal calendar is untouched.
 """
 
-from datetime import datetime, timedelta,timezone
-from pathlib import Path
-
-from google.oauth2.credentials import Credentials
-from backend.integrations.google_calendar.provider import GoogleCalendarProvider
-
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
-
 import argparse
+import asyncio                                                    
+from datetime import datetime, timedelta, timezone
+
+from backend.integrations.google_calendar.provider import GoogleCalendarProvider
+from backend.integrations.tokens.agentcore_lookup import (
+    AgentCoreUserCredentialsLookup,
+)
+
+# Hardcoded for MVP — only one AgentCore user_id exists right now.
+# When Slack integration lands, this'll be looked up per Slack user.
+USER_ID = "85a73e1c"
+
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--acting-user", required=True, help="token filename, e.g. 'chetan'")
-parser.add_argument("--acting-email", required=True)
+parser.add_argument("--acting-email", required=True,
+                    help="Google email of the acting user (must match the "
+                         "account authorized in AgentCore Identity)")
 parser.add_argument("--attendee", action="append", required=True,
                     help="attendee email (repeat flag for multiple)")
 args = parser.parse_args()
 
-# --- Configure the test here ---
-ACTING_USER = args.acting_user
 ACTING_EMAIL = args.acting_email
-ATTENDEES = args.attendee           
-# ------------------------------
+ATTENDEES = args.attendee
 
 
-def load_creds(name: str) -> Credentials:
-    path = Path(f"backend/integrations/tokens/{name}_token.json")
-    if not path.exists():
-        raise FileNotFoundError(
-            f"No token for {name}. Run: python scripts/connect_user.py {name}"
-        )
-    return Credentials.from_authorized_user_file(str(path), SCOPES)
+async def main():
+    # Fetch credentials from AgentCore vault
+    lookup = AgentCoreUserCredentialsLookup()
+    creds = await lookup.get_google_credentials(USER_ID)
 
-
-def main():
-    creds = load_creds(ACTING_USER)
     provider = GoogleCalendarProvider(creds)
 
-    # 1) Free/busy
+    # 1) Free/busy check
     availability = provider.get_availability(
         user_ids=[ACTING_EMAIL] + ATTENDEES,
         date=datetime.now(timezone.utc),
@@ -53,8 +50,7 @@ def main():
         for b in busy:
             print(f"     {b.start} → {b.end}")
 
-
-    # 2) Create meeting ~1 day out, 15 minutes long
+    # 2) Create a meeting ~1 day out, 15 minutes long
     start = (datetime.now(timezone.utc) + timedelta(days=1, hours=2)).replace(microsecond=0)
     end = start + timedelta(minutes=15)
 
@@ -63,7 +59,7 @@ def main():
         attendee_ids=ATTENDEES,
         start=start,
         end=end,
-        title="[TEST] cadd-scheduler token model verification",
+        title="[TEST] cadd-scheduler AgentCore credential model verification",
     )
 
     print("\n--- Meeting created ---")
@@ -72,7 +68,7 @@ def main():
     print(f"  window   : {meeting.start} → {meeting.end}")
     print(
         "\nCheck:\n"
-        f"  ✓ Event on {ACTING_USER}'s calendar (as organizer)\n"
+        f"  ✓ Event on {ACTING_EMAIL}'s calendar (as organizer)\n"
         f"  ✓ Event on each attendee's calendar (as invitee)\n"
         "  ✓ Meet link opens a real Meet room\n"
         "\nDelete the event afterward."
@@ -80,4 +76,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
