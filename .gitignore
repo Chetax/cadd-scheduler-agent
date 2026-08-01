@@ -151,4 +151,5 @@ docker-data/
 *.tmp
 .env.backup
 *_token.json
-credentials.json
+credentials.json.agentcore.json
+.agentcore.json
