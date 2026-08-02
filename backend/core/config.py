@@ -13,11 +13,6 @@ class Settings(BaseSettings):
     slack_signing_secret:str 
     slack_app_token:str 
 
-    # Google Calendar
-    google_client_id: str
-    google_client_secret: str
-    google_redirect_uri: str
-
     # Redis
     redis_url: str
 
@@ -27,9 +22,15 @@ class Settings(BaseSettings):
 
     # AWS
     aws_region: str = "us-east-1"
+    
 
     # AgentCore
     callback_url: str  # ← add this
+    agentcore_oauth_provider_arn: str
+
+    table_name:str
+    table_endpoint_url:str
+
 
 
 settings = Settings()
