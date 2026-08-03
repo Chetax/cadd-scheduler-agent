@@ -170,15 +170,59 @@ cadd-scheduler-agent/
 
 ## Status
 
-🚧 Early build — architecture defined, integrations in progress.
+🚧 **Actively building** — foundations in place, wiring the last mile of onboarding.
 
+**What's working end-to-end today:**
+- AgentCore Identity USER_FEDERATION OAuth flow with session binding
+- Real Google Calendar free/busy queries via vault-sourced credentials
+- Real meeting creation with Google Meet links, delivered to attendee inboxes
+- DynamoDB-backed user model (Slack ↔ email ↔ AgentCore user_id mapping)
+- DynamoDB-backed pending sessions with TTL for concurrent-onboarding safety
+- Slack app installed with `users:read.email` scope; email lookup verified
+
+**What's next:**
+- Wire `PendingSessionRepository` into the callback server
+- Build the onboarding service that stitches Slack → User model → AgentCore
+- Slack slash-command handler
+
+
+
+🚧 Early build — architecture defined, integrations in progress.
 ## Roadmap
 
-- [ ] Slack app: OAuth install + DM negotiation cards
-- [ ] AgentCore Runtime deployment of the 6-agent crew
-- [ ] Step Functions negotiation state machine
+**Foundations (done)**
+- [x] AgentCore Identity USER_FEDERATION OAuth pipeline
 - [x] Google Calendar + Google Meet integration
-- [ ] Microsoft Teams (Bot Framework) parity
+- [x] `UserCredentialsLookup` abstraction with AgentCore-backed implementation
+- [x] `User` model + `UserRepository` (DynamoDB)
+- [x] `PendingSession` model + `PendingSessionRepository` (DynamoDB, TTL, atomic pop)
+- [x] Centralized config via pydantic Settings
+- [x] Slack app registered with `users:read.email` scope verified
+
+**Onboarding wiring (in progress)**
+- [ ] Callback server migrated from `.agentcore.json` to `PendingSessionRepository`
+- [ ] `SlackUserInfoProvider` for `slack_user_id → email` lookup
+- [ ] `OnboardingService` — the glue between Slack, User model, and AgentCore
+- [ ] Success DM to Slack user on OAuth completion
+
+**Slack surface**
+- [ ] Slash command `/cadd` — event handler, signature verification
+- [ ] DM-based negotiation cards (pick a time, propose alternative, confirm)
+- [ ] Slash-command-triggered end-to-end meeting scheduling
+
+**Agent crew**
+- [ ] Framework decision (Strands vs LangGraph)
+- [ ] Six-agent crew: Orchestrator, Availability, Negotiation, Consensus, Meet, Notifier
+- [ ] Step Functions negotiation state machine
+- [ ] AgentCore Runtime deployment
+
+**Multi-platform parity**
+- [ ] Microsoft Teams (Bot Framework)
 - [ ] Outlook Calendar integration
-- [ ] Organizer escalation flow after N failed rounds
+
+**Production readiness**
+- [ ] Callback server on Lambda + Function URL (retire ngrok)
+- [ ] Real DynamoDB (retire DynamoDB Local for prod)
+- [ ] Infrastructure-as-code (CDK) — workload identity, credential provider, tables, Lambda
+- [ ] Organizer escalation flow after N failed negotiation rounds
 - [ ] Web dashboard (meeting history, team settings)
