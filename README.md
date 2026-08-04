@@ -170,14 +170,20 @@ cadd-scheduler-agent/
 
 ## Status
 
-🚧 Early build — architecture defined, integrations in progress.
+🚧 Early build. Onboarding foundation shipped: a Slack user can trigger `/cadd`,
+receive the OAuth link, consent to Google, and the bot fetches their calendar
+credentials from AgentCore Identity's vault — all with no per-user config files
+and multi-user by design. Slash command wiring + agent crew next.
 
 ## Roadmap
 
-- [ ] Slack app: OAuth install + DM negotiation cards
+- [x] Google Calendar + Google Meet integration
+- [x] Per-user OAuth via AgentCore Identity (multi-user vault, session binding)
+- [x] Slack onboarding flow (users.info + auth URL DM + success DM)
+- [ ] Slack `/cadd` slash command → free/busy → meeting creation
+- [ ] DM negotiation cards (Block Kit Accept / Suggest another time)
 - [ ] AgentCore Runtime deployment of the 6-agent crew
 - [ ] Step Functions negotiation state machine
-- [x] Google Calendar + Google Meet integration
 - [ ] Microsoft Teams (Bot Framework) parity
 - [ ] Outlook Calendar integration
 - [ ] Organizer escalation flow after N failed rounds
