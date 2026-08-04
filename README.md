@@ -175,6 +175,7 @@ receive the OAuth link, consent to Google, and the bot fetches their calendar
 credentials from AgentCore Identity's vault — all with no per-user config files
 and multi-user by design. Slash command wiring + agent crew next.
 
+🚧 Early build — architecture defined, integrations in progress.
 ## Roadmap
 
 - [x] Google Calendar + Google Meet integration
@@ -186,5 +187,10 @@ and multi-user by design. Slash command wiring + agent crew next.
 - [ ] Step Functions negotiation state machine
 - [ ] Microsoft Teams (Bot Framework) parity
 - [ ] Outlook Calendar integration
-- [ ] Organizer escalation flow after N failed rounds
+
+**Production readiness**
+- [ ] Callback server on Lambda + Function URL (retire ngrok)
+- [ ] Real DynamoDB (retire DynamoDB Local for prod)
+- [ ] Infrastructure-as-code (CDK) — workload identity, credential provider, tables, Lambda
+- [ ] Organizer escalation flow after N failed negotiation rounds
 - [ ] Web dashboard (meeting history, team settings)
