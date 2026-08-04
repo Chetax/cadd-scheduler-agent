@@ -52,9 +52,15 @@ class UserNotAuthorizedError(Exception):
     can send it to the user to complete onboarding.
     """
 
-    def __init__(self, message: str, auth_url: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        auth_url: str | None = None,
+        session_id: str | None = None,
+    ):
         super().__init__(message)
         self.auth_url = auth_url
+        self.session_id = session_id
 
 
 class CredentialsExpiredError(Exception):

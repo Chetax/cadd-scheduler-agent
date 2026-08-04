@@ -170,54 +170,22 @@ cadd-scheduler-agent/
 
 ## Status
 
-🚧 **Actively building** — foundations in place, wiring the last mile of onboarding.
-
-**What's working end-to-end today:**
-- AgentCore Identity USER_FEDERATION OAuth flow with session binding
-- Real Google Calendar free/busy queries via vault-sourced credentials
-- Real meeting creation with Google Meet links, delivered to attendee inboxes
-- DynamoDB-backed user model (Slack ↔ email ↔ AgentCore user_id mapping)
-- DynamoDB-backed pending sessions with TTL for concurrent-onboarding safety
-- Slack app installed with `users:read.email` scope; email lookup verified
-
-**What's next:**
-- Wire `PendingSessionRepository` into the callback server
-- Build the onboarding service that stitches Slack → User model → AgentCore
-- Slack slash-command handler
-
-
+🚧 Early build. Onboarding foundation shipped: a Slack user can trigger `/cadd`,
+receive the OAuth link, consent to Google, and the bot fetches their calendar
+credentials from AgentCore Identity's vault — all with no per-user config files
+and multi-user by design. Slash command wiring + agent crew next.
 
 🚧 Early build — architecture defined, integrations in progress.
 ## Roadmap
 
-**Foundations (done)**
-- [x] AgentCore Identity USER_FEDERATION OAuth pipeline
 - [x] Google Calendar + Google Meet integration
-- [x] `UserCredentialsLookup` abstraction with AgentCore-backed implementation
-- [x] `User` model + `UserRepository` (DynamoDB)
-- [x] `PendingSession` model + `PendingSessionRepository` (DynamoDB, TTL, atomic pop)
-- [x] Centralized config via pydantic Settings
-- [x] Slack app registered with `users:read.email` scope verified
-
-**Onboarding wiring (in progress)**
-- [ ] Callback server migrated from `.agentcore.json` to `PendingSessionRepository`
-- [ ] `SlackUserInfoProvider` for `slack_user_id → email` lookup
-- [ ] `OnboardingService` — the glue between Slack, User model, and AgentCore
-- [ ] Success DM to Slack user on OAuth completion
-
-**Slack surface**
-- [ ] Slash command `/cadd` — event handler, signature verification
-- [ ] DM-based negotiation cards (pick a time, propose alternative, confirm)
-- [ ] Slash-command-triggered end-to-end meeting scheduling
-
-**Agent crew**
-- [ ] Framework decision (Strands vs LangGraph)
-- [ ] Six-agent crew: Orchestrator, Availability, Negotiation, Consensus, Meet, Notifier
+- [x] Per-user OAuth via AgentCore Identity (multi-user vault, session binding)
+- [x] Slack onboarding flow (users.info + auth URL DM + success DM)
+- [ ] Slack `/cadd` slash command → free/busy → meeting creation
+- [ ] DM negotiation cards (Block Kit Accept / Suggest another time)
+- [ ] AgentCore Runtime deployment of the 6-agent crew
 - [ ] Step Functions negotiation state machine
-- [ ] AgentCore Runtime deployment
-
-**Multi-platform parity**
-- [ ] Microsoft Teams (Bot Framework)
+- [ ] Microsoft Teams (Bot Framework) parity
 - [ ] Outlook Calendar integration
 
 **Production readiness**

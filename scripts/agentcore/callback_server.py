@@ -4,43 +4,101 @@ Local OAuth session-binding callback server for AgentCore Identity USER_FEDERATI
 
 Run:   python scripts/agentcore/callback_server.py
 """
-import json
-from pathlib import Path
+import logging
 
 import boto3
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 import uvicorn
+
+from backend.core.config import settings
+from backend.integrations.dynamodb.pending_session_repository import (
+    DynamoDBPendingSessionRepository,
+)
+from backend.integrations.dynamodb.user_repository import (
+    DynamoDBUserRepository
+)
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Read the user_id that get_google_token.py is polling under.
-# The SDK writes this to .agentcore.json when it first creates the workload identity.
-AGENTCORE_CONFIG = Path(__file__).parent.parent.parent / ".agentcore.json"
-with open(AGENTCORE_CONFIG) as f:
-    _cfg = json.load(f)
-USER_ID = _cfg["user_id"]
+agentcore = boto3.client("bedrock-agentcore", region_name=settings.aws_region)
+pending_sessions = DynamoDBPendingSessionRepository()
+user_repo = DynamoDBUserRepository()
+slack = WebClient(token=settings.slack_bot_token)
 
-# Data-plane client (note: "bedrock-agentcore", NOT "bedrock-agentcore-control")
-agentcore = boto3.client("bedrock-agentcore", region_name="us-east-1")
+def _html(title: str, body: str, status: int = 200) -> HTMLResponse:
+    return HTMLResponse(
+        f"<html><body style='font-family:sans-serif;padding:2rem'>"
+        f"<h2>{title}</h2><p>{body}</p></body></html>",
+        status_code=status,
+    )
 
 
 @app.get("/oauth2/callback")
 async def oauth2_callback(request: Request):
-    session_uri = request.query_params.get("session_id")
-    if not session_uri:
-        return {"error": "missing session_id query param"}
+    session_id = request.query_params.get("session_id")
+    if not session_id:
+        logger.warning("callback hit without session_id")
+        return _html("Missing session", "No session_id in the callback URL.", status=400)
 
-    print(f"\n--- Session-binding callback received ---")
-    print(f"session_uri: {session_uri}")
-    print(f"user_id:     {USER_ID}")
+    #Atomic pop — either we get the row (and it's deleted) or someone else did.
+    popped = pending_sessions.pop(session_id)
 
-    agentcore.complete_resource_token_auth(
-        sessionUri=session_uri,
-        userIdentifier={"userId": USER_ID},
+    if popped is None:
+        logger.warning("no pending session found for session_id=%s", session_id)
+        return _html(
+            "Session expired",
+            "This onboarding link has already been used or has expired. "
+            "Please run <code>/cadd</code> in Slack again.",
+            status=410,
+        )
+    
+    logger.info(
+        "callback: session_id=%s agentcore_user_id=%s slack_user_id=%s",
+        session_id, popped.agentcore_user_id, popped.slack_user_id,
+    )
+    try:
+        agentcore.complete_resource_token_auth(
+            sessionUri=session_id,
+            userIdentifier={"userId": popped.agentcore_user_id},
+        )
+    except Exception:
+        logger.exception("complete_resource_token_auth failed")
+        return _html(
+            "Something went wrong",
+            "We couldn't finish connecting your Google Calendar. "
+            "Please run <code>/cadd</code> in Slack again.",
+            status=500,
+        )
+
+    try:
+        user_repo.mark_authorized(popped.slack_user_id)
+    except Exception:
+        logger.exception(
+            "mark_authorized failed for slack_user_id=%s — vault is bound but DB state is stale",
+            popped.slack_user_id,
+        )
+
+
+    try:
+        slack.chat_postMessage(
+            channel=popped.slack_user_id,
+            text="✅ Google Calendar connected. You can now use `/cadd` to schedule meetings.",
+        )
+    except SlackApiError:
+        logger.exception("slack DM failed for slack_user_id=%s", popped.slack_user_id)
+
+    return _html(
+        "All set 🎉",
+        "Your Google Calendar is connected. You can close this tab and head back to Slack.",
     )
 
-    print("--- complete_resource_token_auth OK — token should now be released ---\n")
-    return {"status": "authorized, you can close this tab"}
 
 
 if __name__ == "__main__":

@@ -63,10 +63,13 @@ class AgentCoreUserCredentialsLookup(UserCredentialsLookup):
     
             access_token = token_response.get("accessToken")
             if not access_token:
-                # No token in the response usually means "user must authorize" —
-                # response would contain an authorizationUrl instead
+                # No token → user must complete OAuth consent.
+                # Response carries the URL to send them to, and the session_id
+                # we need to persist so the callback can bind the session.
                 raise UserNotAuthorizedError(
-                    f"user_id={user_id} needs to complete OAuth consent first"
+                    f"user_id={user_id} needs to complete OAuth consent first",
+                    auth_url=token_response.get("authorizationUrl"),
+                    session_id=token_response.get("sessionUri"),  # confirm field name — see note
                 )
 
             return Credentials(token=access_token)
