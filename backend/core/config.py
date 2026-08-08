@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     
 
     # AgentCore
-    callback_url: str  # ← add this
+    callback_url: str  
     agentcore_oauth_provider_arn: str
 
     table_name:str
