@@ -167,10 +167,9 @@ cadd-scheduler-agent/
 ```
 
 ---
-
 ## Status
 
-🚧 **Actively building** — onboarding foundation shipped, wiring the Slack surface next.
+🚧 **Actively building** — Slack slash-command surface is live end-to-end; agent crew is next.
 
 **What's working end-to-end today:**
 - AgentCore Identity USER_FEDERATION OAuth flow with session binding
@@ -179,13 +178,17 @@ cadd-scheduler-agent/
 - DynamoDB-backed user model (Slack ↔ email ↔ AgentCore user_id mapping)
 - DynamoDB-backed pending sessions with TTL for concurrent-onboarding safety
 - Slack app installed with `users:read.email` scope; email lookup verified
-- **`OnboardingService` — single entry point mapping `slack_user_id` → Google credentials**
-- **Callback server backed by `PendingSessionRepository` (multi-user safe)**
-- **Success DM to the Slack user on OAuth completion**
+- `OnboardingService` — single entry point mapping `slack_user_id` → Google credentials
+- Success DM to the Slack user on OAuth completion
+- **`/slack/commands` webhook — signature-verified, wired to onboarding + calendar scheduling**
+- **Slack HMAC-SHA256 signature verification (`SlackSignatureVerifier`), rejecting stale or forged requests**
+- **Callback server merged into the main FastAPI app — single port, single ngrok tunnel**
+- **Background-task pattern for Slack responses — acknowledges within Slack's 3s window, delivers real results (auth link or meeting confirmation) via DM**
+- **Verified live through real Slack + ngrok + AgentCore + Google Calendar, for both a fresh unauthorized user and an already-authorized user**
 
 **What's next:**
-- Slack `/cadd` slash-command handler wired to `OnboardingService`
-- Real free/busy + meeting creation triggered from Slack (retire manual `test_priority.py`)
+- `@mention` attendee parsing from command text (currently hardcoded to a single test email)
+- Natural-language meeting time parsing (currently hardcoded to a fixed offset) — likely LLM-based
 - Agent framework decision, then the six-agent crew
 
 ## Roadmap
@@ -205,10 +208,13 @@ cadd-scheduler-agent/
 - [x] `OnboardingService` — the glue between Slack, User model, and AgentCore
 - [x] Success DM to Slack user on OAuth completion
 
-**Slack surface**
-- [ ] Slash command `/cadd` — event handler, signature verification
+**Slack surface (done)**
+- [x] Slash command `/cadd` — event handler, HMAC signature verification
+- [x] Slash-command-triggered end-to-end meeting scheduling (onboarding + calendar)
+- [x] Background-task response pattern to stay within Slack's 3s window
+- [ ] `@mention` attendee parsing (replacing hardcoded test attendee)
+- [ ] Natural-language meeting time parsing
 - [ ] DM-based negotiation cards (pick a time, propose alternative, confirm)
-- [ ] Slash-command-triggered end-to-end meeting scheduling
 
 **Agent crew**
 - [ ] Framework decision (Strands vs LangGraph)
@@ -221,7 +227,7 @@ cadd-scheduler-agent/
 - [ ] Outlook Calendar integration
 
 **Production readiness**
-- [ ] Callback server on Lambda + Function URL (retire ngrok)
+- [ ] ~~Callback server on Lambda + Function URL (retire ngrok)~~ → callback server merged into main app; still needs Lambda migration to retire ngrok entirely
 - [ ] Real DynamoDB (retire DynamoDB Local for prod)
 - [ ] Infrastructure-as-code (CDK) — workload identity, credential provider, tables, Lambda
 - [ ] Organizer escalation flow after N failed negotiation rounds
