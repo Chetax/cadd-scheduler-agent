@@ -9,6 +9,9 @@ from backend.core.config import settings
 from backend.integrations.slack.signature_verifier import SlackSignatureVerifier, StaleSlackRequestError, InvalidSlackSignatureError
 from backend.integrations.google_calendar.provider import GoogleCalendarProvider
 from datetime import datetime, timedelta, timezone
+from backend.integrations.bedrock.time_parser import BedrockTimeParser, TimeParseError
+import re
+from zoneinfo import ZoneInfo
 
 router = APIRouter()
 
@@ -22,7 +25,7 @@ onboarding_service = OnboardingService(
 )
 slack_client = WebClient(token=settings.slack_bot_token)
 user_info_provider = SlackWebClientUserInfoProvider(slack_client)
-
+time_parser = BedrockTimeParser(settings.bedrock_model_id, settings.aws_region)
 
 async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     """
@@ -44,7 +47,14 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         )
         return
 
-    attendee_emails = ["padhenchetan@gmail.com"]
+    # mention_ids = re.findall(r"<@([A-Z0-9]+)(?:\|[^>]+)?>", text)
+    # if not mention_ids:
+    #     slack_client.chat_postMessage(
+    #         channel=user_id,
+    #         text="Tag who you want to meet with, e.g. `/cadd meet with @mohit tomorrow at 3pm`",
+    #     )
+    #     return
+    attendee_emails = ["chetan@consultadd.com"]
     provider = GoogleCalendarProvider(creds)
 
     provider.get_availability(
@@ -52,15 +62,28 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         date=datetime.now(timezone.utc),
     )
 
-    start = (datetime.now(timezone.utc) + timedelta(days=1, hours=2)).replace(microsecond=0)
-    end = start + timedelta(minutes=15)
+    timezone_str = "Asia/Kolkata"
+    now = datetime.now(ZoneInfo(timezone_str))
+
+    try:
+        parsed = time_parser.parse(text, now=now, timezone=timezone_str)
+    except TimeParseError:
+        slack_client.chat_postMessage(
+            channel=user_id,
+            text="I couldn't understand that time — try something like 'tomorrow at 3pm'.",
+        )
+        return
+
+    start = parsed.start
+    end = parsed.start + timedelta(minutes=parsed.duration_minutes)
+
 
     meeting = provider.create_meeting(
         organizer_id=acting_email,
         attendee_ids=attendee_emails,
         start=start,
         end=end,
-        title="[TEST] cadd-scheduler AgentCore credential model verification",
+        title="Meeting scheduled via cadd",
     )
 
     slack_client.chat_postMessage(
