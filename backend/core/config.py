@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     # AWS
     aws_region: str = "us-east-1"
+    bedrock_model_id:str 
+    
     
 
     # AgentCore
