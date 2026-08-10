@@ -169,7 +169,7 @@ cadd-scheduler-agent/
 ---
 ## Status
 
-🚧 **Actively building** — Slack slash-command surface is live end-to-end; agent crew is next.
+🚧 **Actively building** — Slack slash-command surface accepts natural-language commands end-to-end (`@mention` attendees + spoken meeting times); agent crew is next.
 
 **What's working end-to-end today:**
 - AgentCore Identity USER_FEDERATION OAuth flow with session binding
@@ -185,11 +185,14 @@ cadd-scheduler-agent/
 - **Callback server merged into the main FastAPI app — single port, single ngrok tunnel**
 - **Background-task pattern for Slack responses — acknowledges within Slack's 3s window, delivers real results (auth link or meeting confirmation) via DM**
 - **Verified live through real Slack + ngrok + AgentCore + Google Calendar, for both a fresh unauthorized user and an already-authorized user**
+- **`@mention` attendee parsing — resolves Slack mentions to emails via escape-encoded `<@ID>` tokens (multiple attendees supported)**
+- **Natural-language meeting-time parsing via Bedrock (Converse API) — handles single times, stated durations, and explicit ranges; timezone-aware**
+- **Both Session-5 hardcoded placeholders (attendees, meeting time) fully removed**
 
 **What's next:**
-- `@mention` attendee parsing from command text (currently hardcoded to a single test email)
-- Natural-language meeting time parsing (currently hardcoded to a fixed offset) — likely LLM-based
+- DM-based negotiation cards (Block Kit — Accept / Suggest another time)
 - Agent framework decision, then the six-agent crew
+- Step Functions negotiation state machine
 
 ## Roadmap
 
@@ -212,8 +215,8 @@ cadd-scheduler-agent/
 - [x] Slash command `/cadd` — event handler, HMAC signature verification
 - [x] Slash-command-triggered end-to-end meeting scheduling (onboarding + calendar)
 - [x] Background-task response pattern to stay within Slack's 3s window
-- [ ] `@mention` attendee parsing (replacing hardcoded test attendee)
-- [ ] Natural-language meeting time parsing
+- [x] `@mention` attendee parsing (replacing hardcoded test attendee)
+- [x] Natural-language meeting time parsing (Bedrock Converse — single time, duration, range; timezone-aware)
 - [ ] DM-based negotiation cards (pick a time, propose alternative, confirm)
 
 **Agent crew**
