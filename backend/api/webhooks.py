@@ -47,14 +47,21 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         )
         return
 
-    # mention_ids = re.findall(r"<@([A-Z0-9]+)(?:\|[^>]+)?>", text)
-    # if not mention_ids:
-    #     slack_client.chat_postMessage(
-    #         channel=user_id,
-    #         text="Tag who you want to meet with, e.g. `/cadd meet with @mohit tomorrow at 3pm`",
-    #     )
-    #     return
-    attendee_emails = ["chetan@consultadd.com"]
+    mention_ids = re.findall(r"<@([A-Z0-9]+)(?:\|[^>]+)?>", text)
+    if not mention_ids:
+        slack_client.chat_postMessage(
+            channel=user_id,
+            text="Tag who you want to meet with, e.g. `/cadd meet with @mohit tomorrow at 3pm`",
+        )
+        return
+    attendee_emails = []
+
+    for mentioned_user_id in mention_ids:
+        email = user_info_provider.get_email(mentioned_user_id)
+
+        if email:
+            attendee_emails.append(email)
+            
     provider = GoogleCalendarProvider(creds)
 
     provider.get_availability(
