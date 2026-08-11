@@ -4,7 +4,7 @@ Google Calendar implementation of CalendarProvider.
 Takes a Credentials object in the constructor — doesn't know or care
 where it came from (a local token file today, AgentCore Identity later).
 """
-from datetime import datetime,timedelta
+from datetime import datetime,timedelta,timezone
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -15,6 +15,8 @@ from backend.integrations.calendar_provider import(
     BusySlot,
     MeetingDetails,
 ) 
+from backend.core.logging import get_logger
+logger = get_logger(__name__)
 
 class GoogleCalendarProvider(CalendarProvider):
     def __init__(self,credentials:Credentials):
@@ -25,21 +27,23 @@ class GoogleCalendarProvider(CalendarProvider):
             cache_discovery=False,
         )
 
-    def get_availability(self,user_ids:list[str], date:datetime) -> dict[str, list[BusySlot]]:
-        day_start = datetime(date.year, date.month, date.day)
-        day_end = day_start + timedelta(days=1)
+    def get_availability(self, user_ids: list[str], start: datetime, end: datetime) -> dict[str, list[BusySlot]]:
         body = {
-            "timeMin": day_start.isoformat() + "Z",
-            "timeMax": day_end.isoformat() + "Z",
+            "timeMin": start.astimezone(timezone.utc).isoformat(),
+            "timeMax": end.astimezone(timezone.utc).isoformat(),
             "items": [{"id": email} for email in user_ids],
         }
         try:
-            response=self._service.freebusy().query(body=body).execute()
+            response = self._service.freebusy().query(body=body).execute()
         except HttpError as e:
             raise RuntimeError(f"freebusy query failed: {e}") from e
-        
+
         result: dict[str, list[BusySlot]] = {}
         for email, cal_info in response.get("calendars", {}).items():
+            errors = cal_info.get("errors", [])
+            if errors:
+                # token missing or no access — log it, don't silently return []
+                logger.warning(f"freebusy error for {email}: {errors}")
             result[email] = [
                 BusySlot(start=slot["start"], end=slot["end"])
                 for slot in cal_info.get("busy", [])

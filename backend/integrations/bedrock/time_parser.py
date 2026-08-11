@@ -29,20 +29,21 @@ class BedrockTimeParser(TimeParser):
         Returns a ParsedTime whose start is timezone-aware. Raises TimeParseError if the phrase can't be resolved."""
 
         system_instruction = """Convert the phrase to JSON.
-Return only JSON with no prose and no markdown fences.
-The exact shape is {"start": "<ISO 8601 with UTC offset>", "duration_minutes": <int>}.
-Resolve relative phrases against the current time you'll be given.
-Default duration to 30 if unstated.
-If the phrase has no usable time, return {"error": "<reason>"} instead.
+            Return only JSON with no prose and no markdown fences.
+            The exact shape is '{"start": "<ISO 8601 with the user's timezone offset>", "duration_minutes": <int>}'.
+            Resolve relative phrases against the current time you'll be given.
+            Default duration to 30 if unstated.
+            If the phrase has no usable time, return {"error": "<reason>"} instead.
 
-NOTE: 
-- stated time is the START
-- If the phrase gives an explicit end time or range, set duration from the gap between start and end.
+            NOTE: 
+            - stated time is the START
+            - If the phrase gives an explicit end time or range, set duration from the gap between start and end.
 
-"""
+            """
 
         user_message = (
             f"Current time: {now.isoformat()} ({timezone})\n"
+             f"User's timezone: {timezone}\n"
             f"Phrase: {text!r}"
         )
 

@@ -188,6 +188,12 @@ cadd-scheduler-agent/
 - **`@mention` attendee parsing — resolves Slack mentions to emails via escape-encoded `<@ID>` tokens (multiple attendees supported)**
 - **Natural-language meeting-time parsing via Bedrock (Converse API) — handles single times, stated durations, and explicit ranges; timezone-aware**
 - **Both Session-5 hardcoded placeholders (attendees, meeting time) fully removed**
+- **Conflict detection — checks all attendees' calendars before booking; blocks meeting creation if anyone is busy**
+- **Free slot finder (`find_free_slots`) — merges busy blocks across all attendees, returns gaps within org working hours (5:30 PM – 2:30 AM IST)**
+- **Friendly conflict message in Slack — shows who is busy, lists up to 3 alternative slots in IST**
+- **`get_display_name` added to `SlackUserInfoProvider` — shows attendee names not emails in conflict messages**
+- **Logging infrastructure (`core/logging.py`) — structured timestamps across all modules**
+- **Time parser timezone fix — returns user's timezone offset (IST) not UTC**
 
 **What's next:**
 - DM-based negotiation cards (Block Kit — Accept / Suggest another time)
@@ -217,6 +223,7 @@ cadd-scheduler-agent/
 - [x] Background-task response pattern to stay within Slack's 3s window
 - [x] `@mention` attendee parsing (replacing hardcoded test attendee)
 - [x] Natural-language meeting time parsing (Bedrock Converse — single time, duration, range; timezone-aware)
+- [x] Conflict detection with free-slot alternatives (working hours scoped)
 - [ ] DM-based negotiation cards (pick a time, propose alternative, confirm)
 
 **Agent crew**

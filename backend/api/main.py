@@ -1,11 +1,10 @@
-import logging
-
 import boto3
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 import uvicorn
+from backend.core.logging import setup_logging, get_logger
 
 from backend.core.config import settings
 from backend.api.webhooks import router
@@ -14,8 +13,8 @@ from backend.integrations.dynamodb.pending_session_repository import (
 )
 from backend.integrations.dynamodb.user_repository import DynamoDBUserRepository
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+setup_logging()
+logger = get_logger(__name__)
 
 app = FastAPI()
 app.include_router(router)

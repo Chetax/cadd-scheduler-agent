@@ -11,8 +11,11 @@ from backend.integrations.google_calendar.provider import GoogleCalendarProvider
 from datetime import datetime, timedelta, timezone
 from backend.integrations.bedrock.time_parser import BedrockTimeParser, TimeParseError
 import re
+from backend.core.availability import find_free_slots
 from zoneinfo import ZoneInfo
+from backend.core.logging import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter()
 
 onboarding_service = OnboardingService(
@@ -27,13 +30,8 @@ slack_client = WebClient(token=settings.slack_bot_token)
 user_info_provider = SlackWebClientUserInfoProvider(slack_client)
 time_parser = BedrockTimeParser(settings.bedrock_model_id, settings.aws_region)
 
+
 async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
-    """
-    Does all the slow work — email lookup, onboarding check, calendar
-    calls — AFTER Slack has already gotten its immediate acknowledgment.
-    Any result (auth link or meeting confirmation) is delivered via DM,
-    since the original HTTP response is long gone by the time this runs.
-    """
     acting_email = user_info_provider.get_email(user_id)
 
     try:
@@ -54,23 +52,28 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
             text="Tag who you want to meet with, e.g. `/cadd meet with @mohit tomorrow at 3pm`",
         )
         return
-    attendee_emails = []
 
+    attendee_emails: list[str] = []
+    attendee_display: dict[str, str] = {}
     for mentioned_user_id in mention_ids:
         email = user_info_provider.get_email(mentioned_user_id)
-
+        name = user_info_provider.get_display_name(mentioned_user_id)
         if email:
             attendee_emails.append(email)
-            
-    provider = GoogleCalendarProvider(creds)
+            attendee_display[email] = name or email
 
-    provider.get_availability(
-        user_ids=[acting_email] + attendee_emails,
-        date=datetime.now(timezone.utc),
-    )
+    if not attendee_emails:
+        slack_client.chat_postMessage(
+            channel=user_id,
+            text="Couldn't resolve any attendees — make sure you @mention them.",
+        )
+        return
+
+    provider = GoogleCalendarProvider(creds)
 
     timezone_str = "Asia/Kolkata"
     now = datetime.now(ZoneInfo(timezone_str))
+    ist = ZoneInfo(timezone_str)
 
     try:
         parsed = time_parser.parse(text, now=now, timezone=timezone_str)
@@ -84,7 +87,63 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     start = parsed.start
     end = parsed.start + timedelta(minutes=parsed.duration_minutes)
 
+    logger.info(f"Querying slot: {start} → {end} for {[acting_email] + attendee_emails}")
 
+    busy_by_person = provider.get_availability(
+        user_ids=[acting_email] + attendee_emails,
+        start=start,
+        end=end,
+    )
+
+    logger.info(f"Busy results: {busy_by_person}")
+
+    conflicts = {
+        email: slots
+        for email, slots in busy_by_person.items()
+        if slots
+    }
+
+    if conflicts:
+        # search within working hours (5:30 PM to 2:30 AM IST = 9 hours)
+        work_start = start.astimezone(ist).replace(hour=17, minute=30, second=0, microsecond=0)
+        work_end = work_start + timedelta(hours=9)
+        search_start = max(start, work_start)
+
+        free_slots = find_free_slots(
+            busy_by_person=busy_by_person,
+            search_start=search_start,
+            search_end=work_end,
+            duration_minutes=parsed.duration_minutes,
+        )
+
+        busy_names = [attendee_display.get(e, e) for e in conflicts]
+        who = (
+            f"{busy_names[0]} is busy"
+            if len(busy_names) == 1
+            else f"{len(busy_names)} attendees are busy ({', '.join(busy_names)})"
+        )
+
+        if free_slots:
+            slot_lines = "\n".join(
+                f"  {i+1}. {s.astimezone(ist).strftime('%I:%M %p')} – {e.astimezone(ist).strftime('%I:%M %p')} IST"
+                for i, (s, e) in enumerate(free_slots[:3])
+            )
+            slack_client.chat_postMessage(
+                channel=user_id,
+                text=(
+                    f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')}\n\n"
+                    f"📅 Available slots:\n{slot_lines}\n\n"
+                    f"_Pick a slot — buttons coming next session..._"
+                ),
+            )
+        else:
+            slack_client.chat_postMessage(
+                channel=user_id,
+                text=f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')}\n\nNo free slots in working hours.",
+            )
+        return
+
+    # no conflicts — book it
     meeting = provider.create_meeting(
         organizer_id=acting_email,
         attendee_ids=attendee_emails,
@@ -93,6 +152,7 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         title="Meeting scheduled via cadd",
     )
 
+    logger.info(f"Meeting created: {meeting.join_url}")
     slack_client.chat_postMessage(
         channel=user_id,
         text=f"✅ Meeting scheduled! Join here: {meeting.join_url}\n🕒 {meeting.start} → {meeting.end}",
@@ -122,10 +182,8 @@ async def slack_webhook(request: Request, background_tasks: BackgroundTasks):
     team_id = formObj.get("team_id")
     text = formObj.get("text")
 
-    # Schedule the slow work to run AFTER this response is sent.
     background_tasks.add_task(process_cadd_command, user_id, team_id, text)
 
-    # Respond to Slack immediately — well under the 3-second window.
     return {
         "response_type": "ephemeral",
         "text": "Working on it — I'll DM you shortly.",
