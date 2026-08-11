@@ -19,6 +19,10 @@ class SlackUserInfoProvider(ABC):
         """
         ...
 
+    @abstractmethod
+    def get_display_name(self, slack_user_id: str) -> str:
+        """Return the display name for a Slack user."""
+
 
 class SlackUserInfoError(Exception):
     """Raised when a Slack user's email cannot be resolved."""
