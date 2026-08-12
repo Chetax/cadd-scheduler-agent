@@ -60,7 +60,7 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         name = user_info_provider.get_display_name(mentioned_user_id)
         if email:
             attendee_emails.append(email)
-            attendee_display[email] = name or email
+            attendee_display[email] = f"<@{mentioned_user_id}>"
 
     if not attendee_emails:
         slack_client.chat_postMessage(
@@ -89,10 +89,18 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
 
     logger.info(f"Querying slot: {start} → {end} for {[acting_email] + attendee_emails}")
 
+    start_ist = start.astimezone(ist)
+    if start_ist.hour < 3 or (start_ist.hour == 2 and start_ist.minute <= 30):
+        # e.g. 12:00 AM on Aug 14 → working window started Aug 13 5:30 PM
+        query_start = (start_ist - timedelta(days=1)).replace(hour=17, minute=30, second=0, microsecond=0)
+    else:
+        query_start = start_ist.replace(hour=17, minute=30, second=0, microsecond=0)
+    query_end = query_start + timedelta(hours=9)
+
     busy_by_person = provider.get_availability(
         user_ids=[acting_email] + attendee_emails,
-        start=start,
-        end=end,
+        start=query_start,
+        end=query_end,
     )
 
     logger.info(f"Busy results: {busy_by_person}")
@@ -104,10 +112,13 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     }
 
     if conflicts:
-        # search within working hours (5:30 PM to 2:30 AM IST = 9 hours)
-        work_start = start.astimezone(ist).replace(hour=17, minute=30, second=0, microsecond=0)
+        # same midnight-crossing logic as query window above
+        if start_ist.hour < 3 or (start_ist.hour == 2 and start_ist.minute <= 30):
+            work_start = (start_ist - timedelta(days=1)).replace(hour=17, minute=30, second=0, microsecond=0)
+        else:
+            work_start = start_ist.replace(hour=17, minute=30, second=0, microsecond=0)
         work_end = work_start + timedelta(hours=9)
-        search_start = max(start, work_start)
+        search_start = work_start
 
         free_slots = find_free_slots(
             busy_by_person=busy_by_person,
@@ -124,15 +135,29 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         )
 
         if free_slots:
+            # free_slots are already the exact gaps — show them as ranges directly.
+            # e.g. (5:30 PM, 10:00 PM) becomes "05:30 PM – 10:00 PM IST (4h 30m)"
+            def format_duration(gap_start: datetime, gap_end: datetime) -> str:
+                total_minutes = int((gap_end - gap_start).total_seconds() / 60)
+                hours, mins = divmod(total_minutes, 60)
+                if hours and mins:
+                    return f"{hours}h {mins}m"
+                elif hours:
+                    return f"{hours}h"
+                else:
+                    return f"{mins}m"
+
             slot_lines = "\n".join(
-                f"  {i+1}. {s.astimezone(ist).strftime('%I:%M %p')} – {e.astimezone(ist).strftime('%I:%M %p')} IST"
+                f"  {i+1}. {s.astimezone(ist).strftime('%I:%M %p')} – "
+                f"{e.astimezone(ist).strftime('%I:%M %p')} IST "
+                f"({format_duration(s, e)})"
                 for i, (s, e) in enumerate(free_slots[:3])
             )
             slack_client.chat_postMessage(
                 channel=user_id,
                 text=(
                     f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')}\n\n"
-                    f"📅 Available slots:\n{slot_lines}\n\n"
+                    f"📅 Free windows:\n{slot_lines}\n\n"
                     f"_Pick a slot — buttons coming next session..._"
                 ),
             )
@@ -144,18 +169,25 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         return
 
     # no conflicts — book it
-    meeting = provider.create_meeting(
-        organizer_id=acting_email,
-        attendee_ids=attendee_emails,
-        start=start,
-        end=end,
-        title="Meeting scheduled via cadd",
-    )
+    # meeting = provider.create_meeting(
+    #     organizer_id=acting_email,
+    #     attendee_ids=attendee_emails,
+    #     start=start,
+    #     end=end,
+    #     title="Meeting scheduled via cadd",
+    # )
 
-    logger.info(f"Meeting created: {meeting.join_url}")
+    # logger.info(f"Meeting created: {meeting.join_url}")
     slack_client.chat_postMessage(
         channel=user_id,
-        text=f"✅ Meeting scheduled! Join here: {meeting.join_url}\n🕒 {meeting.start} → {meeting.end}",
+        text=(
+        f"✅ No conflicts found!\n"
+        f"🕒 Slot: {start.astimezone(ist).strftime('%I:%M %p')} – "
+        f"{end.astimezone(ist).strftime('%I:%M %p')} IST\n"
+        f"👥 Attendees: {', '.join(attendee_display.values())}\n"
+        f"_(Meeting creation is disabled for testing)_"
+    ),
+        # text=f"✅ Meeting scheduled! Join here: {meeting.join_url}\n🕒 {meeting.start} → {meeting.end}",
     )
 
 

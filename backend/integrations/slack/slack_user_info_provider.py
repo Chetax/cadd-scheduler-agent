@@ -17,6 +17,7 @@ class SlackWebClientUserInfoProvider(SlackUserInfoProvider):
 
     def __init__(self, client: WebClient):
         self._client = client
+        self._profile_cache: dict[str, dict] = {}   
 
     def _get_user_profile(self, slack_user_id: str) -> dict:
         if slack_user_id not in self._profile_cache:
