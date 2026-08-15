@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     slack_bot_token:str
     slack_signing_secret:str 
     slack_app_token:str 
+    test_slack_user_id: str
+    test_slack_team_id: str
 
     # Redis
     redis_url: str
