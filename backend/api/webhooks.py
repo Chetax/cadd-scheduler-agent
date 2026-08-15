@@ -11,6 +11,7 @@ from backend.integrations.google_calendar.provider import GoogleCalendarProvider
 from datetime import datetime, timedelta, timezone
 from backend.integrations.bedrock.time_parser import BedrockTimeParser, TimeParseError
 import re
+import json
 from backend.core.availability import find_free_slots
 from zoneinfo import ZoneInfo
 from backend.core.logging import get_logger
@@ -60,7 +61,7 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         name = user_info_provider.get_display_name(mentioned_user_id)
         if email:
             attendee_emails.append(email)
-            attendee_display[email] = name or email
+            attendee_display[email] = f"<@{mentioned_user_id}>"
 
     if not attendee_emails:
         slack_client.chat_postMessage(
@@ -89,10 +90,18 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
 
     logger.info(f"Querying slot: {start} → {end} for {[acting_email] + attendee_emails}")
 
+    start_ist = start.astimezone(ist)
+    if start_ist.hour < 3 or (start_ist.hour == 2 and start_ist.minute <= 30):
+        # e.g. 12:00 AM on Aug 14 → working window started Aug 13 5:30 PM
+        query_start = (start_ist - timedelta(days=1)).replace(hour=17, minute=30, second=0, microsecond=0)
+    else:
+        query_start = start_ist.replace(hour=17, minute=30, second=0, microsecond=0)
+    query_end = query_start + timedelta(hours=9)
+
     busy_by_person = provider.get_availability(
         user_ids=[acting_email] + attendee_emails,
-        start=start,
-        end=end,
+        start=query_start,
+        end=query_end,
     )
 
     logger.info(f"Busy results: {busy_by_person}")
@@ -104,10 +113,13 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     }
 
     if conflicts:
-        # search within working hours (5:30 PM to 2:30 AM IST = 9 hours)
-        work_start = start.astimezone(ist).replace(hour=17, minute=30, second=0, microsecond=0)
+        # same midnight-crossing logic as query window above
+        if start_ist.hour < 3 or (start_ist.hour == 2 and start_ist.minute <= 30):
+            work_start = (start_ist - timedelta(days=1)).replace(hour=17, minute=30, second=0, microsecond=0)
+        else:
+            work_start = start_ist.replace(hour=17, minute=30, second=0, microsecond=0)
         work_end = work_start + timedelta(hours=9)
-        search_start = max(start, work_start)
+        search_start = work_start
 
         free_slots = find_free_slots(
             busy_by_person=busy_by_person,
@@ -124,17 +136,43 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         )
 
         if free_slots:
-            slot_lines = "\n".join(
-                f"  {i+1}. {s.astimezone(ist).strftime('%I:%M %p')} – {e.astimezone(ist).strftime('%I:%M %p')} IST"
-                for i, (s, e) in enumerate(free_slots[:3])
-            )
+            # free_slots are already the exact gaps — show them as ranges directly.
+            # e.g. (5:30 PM, 10:00 PM) becomes "05:30 PM – 10:00 PM IST (4h 30m)"
+            def format_duration(gap_start: datetime, gap_end: datetime) -> str:
+                total_minutes = int((gap_end - gap_start).total_seconds() / 60)
+                hours, mins = divmod(total_minutes, 60)
+                if hours and mins:
+                    return f"{hours}h {mins}m"
+                elif hours:
+                    return f"{hours}h"
+                else:
+                    return f"{mins}m"
+
+            buttons = []
+            for ind,(slot_start, slot_end) in enumerate(free_slots[:3]):
+                buttons.append({
+                    "type":'button',
+                    "text":{
+                        "type": "plain_text",
+                        "text": f"{slot_start.astimezone(ist).strftime('%I:%M %p')}-{slot_end.astimezone(ist).strftime('%I:%M %p')} {format_duration(slot_start,slot_end)}"
+                    },
+                    'action_id':f"book_slot_{ind}",
+                    'value':json.dumps({"acting_email":acting_email,
+                                        'attendee_emails':attendee_emails,
+                                        'start':slot_start.isoformat(), 
+                                        'end':slot_end.isoformat(),
+                                        'team_id':team_id,
+                                        'user_id':user_id})
+
+                })
+
+
             slack_client.chat_postMessage(
                 channel=user_id,
                 text=(
                     f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')}\n\n"
-                    f"📅 Available slots:\n{slot_lines}\n\n"
-                    f"_Pick a slot — buttons coming next session..._"
                 ),
+                blocks=[{'type':'section','text':{'type': 'mrkdwn', 'text': f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')} — pick a free window:"}},{ 'type':'actions','elements':buttons}]
             )
         else:
             slack_client.chat_postMessage(
@@ -155,9 +193,55 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     logger.info(f"Meeting created: {meeting.join_url}")
     slack_client.chat_postMessage(
         channel=user_id,
-        text=f"✅ Meeting scheduled! Join here: {meeting.join_url}\n🕒 {meeting.start} → {meeting.end}",
+        text=(
+        f"✅ No conflicts found!\n"
+        f"🕒 Slot: {start.astimezone(ist).strftime('%I:%M %p')} – "
+        f"{end.astimezone(ist).strftime('%I:%M %p')} IST\n"
+        f"👥 Attendees: {', '.join(attendee_display.values())}\n"
+        f"🔗 {meeting.join_url}\n"
+    ),
     )
 
+
+async def handle_book_slot(user_id:str, team_id:str, acting_email:str, attendee_emails:list[str], start, end):
+
+    try:
+        creds = await onboarding_service.get_credentials_for_slack_user(user_id, team_id)
+    except OnboardingRequired as e:
+            slack_client.chat_postMessage(
+                channel=user_id,
+                text=f"\n  Open this URL in a browser and click Allow:\n\n  {e.auth_url}\n",
+                unfurl_links=False,
+                unfurl_media=False,
+            )
+            return
+    
+    provider = GoogleCalendarProvider(creds)
+    meeting = provider.create_meeting(
+            organizer_id=acting_email,
+            attendee_ids=attendee_emails,
+            start=start,
+            end=end,
+            title="Meeting scheduled via cadd",
+        )
+
+    timezone_str = "Asia/Kolkata"
+    ist = ZoneInfo(timezone_str)
+
+
+    slack_client.chat_postMessage(
+            channel=user_id,
+            text=(
+            f"🕒 Slot: {start.astimezone(ist).strftime('%I:%M %p')} – "
+            f"{end.astimezone(ist).strftime('%I:%M %p')} IST\n"
+            f"👥 Attendees: {', '.join(attendee_emails)}\n"
+            f"🔗 {meeting.join_url}\n"
+        ),)
+
+
+
+
+    
 
 @router.post("/slack/commands")
 async def slack_webhook(request: Request, background_tasks: BackgroundTasks):
@@ -188,3 +272,49 @@ async def slack_webhook(request: Request, background_tasks: BackgroundTasks):
         "response_type": "ephemeral",
         "text": "Working on it — I'll DM you shortly.",
     }
+
+
+@router.post("/slack/actions")
+async def slack_actions(request:Request,background_tasks: BackgroundTasks):
+    raw_body = await request.body()
+    timestamp = request.headers.get("X-Slack-Request-Timestamp")
+    signature = request.headers.get("X-Slack-Signature")
+
+    if timestamp is None or signature is None:
+            raise HTTPException(status_code=401, detail="Missing Slack signature headers")
+    
+    slack_instance = SlackSignatureVerifier(settings.slack_signing_secret)
+
+    try:
+        slack_instance.verify(timestamp, signature, raw_body)
+    except StaleSlackRequestError as e:
+            raise HTTPException(status_code=401, detail=f"Stale Slack Request Error : {e}")
+    except InvalidSlackSignatureError as e:
+            raise HTTPException(status_code=401, detail=f"Invalid Slack Signature Error : {e}")
+
+    formObj = await request.form()
+    formPayload=formObj.get("payload")
+    data=json.loads(formPayload)
+    value = data["actions"][0]["value"]
+    bokking=json.loads(value)
+    user_id=bokking['user_id']
+    team_id=bokking['team_id']
+    acting_email=bokking['acting_email']
+    attendee_emails=bokking['attendee_emails']
+    start=datetime.fromisoformat(bokking['start'])
+    end=datetime.fromisoformat(bokking['end'])
+
+    background_tasks.add_task(handle_book_slot, user_id, team_id, acting_email, attendee_emails, start, end)
+
+    return {"ok": True}
+
+
+
+    
+    
+
+
+    
+
+
+
