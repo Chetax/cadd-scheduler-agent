@@ -194,11 +194,17 @@ cadd-scheduler-agent/
 - **`get_display_name` added to `SlackUserInfoProvider` — shows attendee names not emails in conflict messages**
 - **Logging infrastructure (`core/logging.py`) — structured timestamps across all modules**
 - **Time parser timezone fix — returns user's timezone offset (IST) not UTC**
+- **Block Kit interactive buttons — conflict message now shows tappable slot buttons instead of plain text**
+- **`/slack/actions` route — signature-verified endpoint receives button clicks and books meetings**
+- **Full two-turn flow — `/cadd` command → conflict detected → buttons → user taps → real meeting booked with Google Meet link**
+- **Midnight-crossing working hours fix — correctly identifies free windows for shifts spanning two calendar days**
+- **`@mention` renders as tappable Slack mention in conflict messages instead of plain display name**
 
 **What's next:**
-- DM-based negotiation cards (Block Kit — Accept / Suggest another time)
-- Agent framework decision, then the six-agent crew
+- Agent framework decision (Strands vs LangGraph vs CrewAI)
+- Six-agent crew: Orchestrator, Availability, Negotiation, Consensus, Meet, Notifier
 - Step Functions negotiation state machine
+- `login_hint` + `hd` param on auth URL to prevent wrong Google account onboarding
 
 ## Roadmap
 
@@ -224,7 +230,7 @@ cadd-scheduler-agent/
 - [x] `@mention` attendee parsing (replacing hardcoded test attendee)
 - [x] Natural-language meeting time parsing (Bedrock Converse — single time, duration, range; timezone-aware)
 - [x] Conflict detection with free-slot alternatives (working hours scoped)
-- [ ] DM-based negotiation cards (pick a time, propose alternative, confirm)
+- [x] DM-based negotiation cards (pick a time, propose alternative, confirm)
 
 **Agent crew**
 - [ ] Framework decision (Strands vs LangGraph)
