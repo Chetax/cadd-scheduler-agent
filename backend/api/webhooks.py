@@ -11,6 +11,7 @@ from backend.integrations.google_calendar.provider import GoogleCalendarProvider
 from datetime import datetime, timedelta, timezone
 from backend.integrations.bedrock.time_parser import BedrockTimeParser, TimeParseError
 import re
+import json
 from backend.core.availability import find_free_slots
 from zoneinfo import ZoneInfo
 from backend.core.logging import get_logger
@@ -147,19 +148,31 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
                 else:
                     return f"{mins}m"
 
-            slot_lines = "\n".join(
-                f"  {i+1}. {s.astimezone(ist).strftime('%I:%M %p')} – "
-                f"{e.astimezone(ist).strftime('%I:%M %p')} IST "
-                f"({format_duration(s, e)})"
-                for i, (s, e) in enumerate(free_slots[:3])
-            )
+            buttons = []
+            for ind,(slot_start, slot_end) in enumerate(free_slots[:3]):
+                buttons.append({
+                    "type":'button',
+                    "text":{
+                        "type": "plain_text",
+                        "text": f"{slot_start.astimezone(ist).strftime('%I:%M %p')}-{slot_end.astimezone(ist).strftime('%I:%M %p')} {format_duration(slot_start,slot_end)}"
+                    },
+                    'action_id':f"book_slot_{ind}",
+                    'value':json.dumps({"acting_email":acting_email,
+                                        'attendee_emails':attendee_emails,
+                                        'start':slot_start.isoformat(), 
+                                        'end':slot_end.isoformat(),
+                                        'team_id':team_id,
+                                        'user_id':user_id})
+
+                })
+
+
             slack_client.chat_postMessage(
                 channel=user_id,
                 text=(
                     f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')}\n\n"
-                    f"📅 Free windows:\n{slot_lines}\n\n"
-                    f"_Pick a slot — buttons coming next session..._"
                 ),
+                blocks=[{'type':'section','text':{'type': 'mrkdwn', 'text': f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')} — pick a free window:"}},{ 'type':'actions','elements':buttons}]
             )
         else:
             slack_client.chat_postMessage(
