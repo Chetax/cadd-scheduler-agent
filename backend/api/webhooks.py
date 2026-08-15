@@ -182,15 +182,15 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         return
 
     # no conflicts — book it
-    # meeting = provider.create_meeting(
-    #     organizer_id=acting_email,
-    #     attendee_ids=attendee_emails,
-    #     start=start,
-    #     end=end,
-    #     title="Meeting scheduled via cadd",
-    # )
+    meeting = provider.create_meeting(
+        organizer_id=acting_email,
+        attendee_ids=attendee_emails,
+        start=start,
+        end=end,
+        title="Meeting scheduled via cadd",
+    )
 
-    # logger.info(f"Meeting created: {meeting.join_url}")
+    logger.info(f"Meeting created: {meeting.join_url}")
     slack_client.chat_postMessage(
         channel=user_id,
         text=(
@@ -198,9 +198,8 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         f"🕒 Slot: {start.astimezone(ist).strftime('%I:%M %p')} – "
         f"{end.astimezone(ist).strftime('%I:%M %p')} IST\n"
         f"👥 Attendees: {', '.join(attendee_display.values())}\n"
-        f"_(Meeting creation is disabled for testing)_"
+        f"🔗 {meeting.join_url}\n"
     ),
-        # text=f"✅ Meeting scheduled! Join here: {meeting.join_url}\n🕒 {meeting.start} → {meeting.end}",
     )
 
 
@@ -218,13 +217,13 @@ async def handle_book_slot(user_id:str, team_id:str, acting_email:str, attendee_
             return
     
     provider = GoogleCalendarProvider(creds)
-    # meeting = provider.create_meeting(
-    #         organizer_id=acting_email,
-    #         attendee_ids=attendee_emails,
-    #         start=start,
-    #         end=end,
-    #         title="Meeting scheduled via cadd",
-    #     )
+    meeting = provider.create_meeting(
+            organizer_id=acting_email,
+            attendee_ids=attendee_emails,
+            start=start,
+            end=end,
+            title="Meeting scheduled via cadd",
+        )
 
     timezone_str = "Asia/Kolkata"
     ist = ZoneInfo(timezone_str)
@@ -236,7 +235,7 @@ async def handle_book_slot(user_id:str, team_id:str, acting_email:str, attendee_
             f"🕒 Slot: {start.astimezone(ist).strftime('%I:%M %p')} – "
             f"{end.astimezone(ist).strftime('%I:%M %p')} IST\n"
             f"👥 Attendees: {', '.join(attendee_emails)}\n"
-            f"_(Meeting creation is disabled for testing)_"
+            f"🔗 {meeting.join_url}\n"
         ),)
 
 
