@@ -169,7 +169,7 @@ cadd-scheduler-agent/
 ---
 ## Status
 
-🚧 **Actively building** — Slack slash-command surface accepts natural-language commands end-to-end (`@mention` attendees + spoken meeting times); agent crew is next.
+🚧 **Actively building** — Slack slash-command surface accepts natural-language commands end-to-end (`@mention` attendees + spoken meeting times); Strands adopted as the agent framework, orchestrator scaffolded with two tools proven live against real Workspace calendars.
 
 **What's working end-to-end today:**
 - AgentCore Identity USER_FEDERATION OAuth flow with session binding
@@ -199,10 +199,16 @@ cadd-scheduler-agent/
 - **Full two-turn flow — `/cadd` command → conflict detected → buttons → user taps → real meeting booked with Google Meet link**
 - **Midnight-crossing working hours fix — correctly identifies free windows for shifts spanning two calendar days**
 - **`@mention` renders as tappable Slack mention in conflict messages instead of plain display name**
+- **Strands adopted as the agent framework** — chosen over LangGraph and CrewAI because Step Functions owns the state machine (LangGraph's core value redundant), AgentCore Runtime is a hard requirement (Strands has first-class integration), and existing codebase philosophy ("seal non-determinism at boundaries") maps cleanly onto Strands' model-driven, tools-as-primitives approach
+- **Two Strands tools wrapped and verified live** — `find_free_slots_tool` (thin adapter over the Session 7 pure function) and `get_availability_tool` (factory pattern that closes over per-user Google credentials from AgentCore Identity)
+- **Orchestrator agent** — `build_agent(creds)` factory produces per-request Strands `Agent` instances with both tools available; LLM chains the tools end-to-end (get_availability → find_free_slots) via docstring-guided reasoning, no glue code
+- **Verified against real Workspace calendars** — orchestrator correctly detects Ashwin's real busy blocks and proposes non-conflicting 30-minute meeting windows, matching the behavior of the existing hand-wired `/cadd` flow but without any imperative control flow
+- **Existing `webhooks.py` untouched** — Sessions 1–8 code path still ships; agent path lives side-by-side, ready to be feature-flagged in the next session
 
 **What's next:**
-- Agent framework decision (Strands vs LangGraph vs CrewAI)
-- Six-agent crew: Orchestrator, Availability, Negotiation, Consensus, Meet, Notifier
+- `create_meeting_tool` — third tool wrapping `GoogleCalendarProvider.create_meeting` so the orchestrator can actually book, not just propose
+- Wire orchestrator into `webhooks.py` behind a feature flag, side-by-side with the existing hand-wired flow
+- Remaining agents in the crew: Negotiation, Consensus, Meet, Notifier (built when they have real tools to justify their existence, not before)
 - Step Functions negotiation state machine
 - `login_hint` + `hd` param on auth URL to prevent wrong Google account onboarding
 
@@ -233,8 +239,10 @@ cadd-scheduler-agent/
 - [x] DM-based negotiation cards (pick a time, propose alternative, confirm)
 
 **Agent crew**
-- [ ] Framework decision (Strands vs LangGraph)
-- [ ] Six-agent crew: Orchestrator, Availability, Negotiation, Consensus, Meet, Notifier
+- [x] Framework decision — Strands (see What's working)
+- [x] Orchestrator agent scaffolded with `get_availability` + `find_free_slots` tools
+- [ ] `create_meeting_tool` + orchestrator wired into `webhooks.py`
+- [ ] Remaining crew members: Negotiation, Consensus, Meet, Notifier
 - [ ] Step Functions negotiation state machine
 - [ ] AgentCore Runtime deployment
 
