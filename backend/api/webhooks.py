@@ -204,6 +204,46 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     )
 
 
+async def handle_book_slot(user_id:str, team_id:str, acting_email:str, attendee_emails:list[str], start, end):
+
+    try:
+        creds = await onboarding_service.get_credentials_for_slack_user(user_id, team_id)
+    except OnboardingRequired as e:
+            slack_client.chat_postMessage(
+                channel=user_id,
+                text=f"\n  Open this URL in a browser and click Allow:\n\n  {e.auth_url}\n",
+                unfurl_links=False,
+                unfurl_media=False,
+            )
+            return
+    
+    provider = GoogleCalendarProvider(creds)
+    # meeting = provider.create_meeting(
+    #         organizer_id=acting_email,
+    #         attendee_ids=attendee_emails,
+    #         start=start,
+    #         end=end,
+    #         title="Meeting scheduled via cadd",
+    #     )
+
+    timezone_str = "Asia/Kolkata"
+    ist = ZoneInfo(timezone_str)
+
+
+    slack_client.chat_postMessage(
+            channel=user_id,
+            text=(
+            f"🕒 Slot: {start.astimezone(ist).strftime('%I:%M %p')} – "
+            f"{end.astimezone(ist).strftime('%I:%M %p')} IST\n"
+            f"👥 Attendees: {', '.join(attendee_emails)}\n"
+            f"_(Meeting creation is disabled for testing)_"
+        ),)
+
+
+
+
+    
+
 @router.post("/slack/commands")
 async def slack_webhook(request: Request, background_tasks: BackgroundTasks):
     raw_body = await request.body()
@@ -233,3 +273,49 @@ async def slack_webhook(request: Request, background_tasks: BackgroundTasks):
         "response_type": "ephemeral",
         "text": "Working on it — I'll DM you shortly.",
     }
+
+
+@router.post("/slack/actions")
+async def slack_actions(request:Request,background_tasks: BackgroundTasks):
+    raw_body = await request.body()
+    timestamp = request.headers.get("X-Slack-Request-Timestamp")
+    signature = request.headers.get("X-Slack-Signature")
+
+    if timestamp is None or signature is None:
+            raise HTTPException(status_code=401, detail="Missing Slack signature headers")
+    
+    slack_instance = SlackSignatureVerifier(settings.slack_signing_secret)
+
+    try:
+        slack_instance.verify(timestamp, signature, raw_body)
+    except StaleSlackRequestError as e:
+            raise HTTPException(status_code=401, detail=f"Stale Slack Request Error : {e}")
+    except InvalidSlackSignatureError as e:
+            raise HTTPException(status_code=401, detail=f"Invalid Slack Signature Error : {e}")
+
+    formObj = await request.form()
+    formPayload=formObj.get("payload")
+    data=json.loads(formPayload)
+    value = data["actions"][0]["value"]
+    bokking=json.loads(value)
+    user_id=bokking['user_id']
+    team_id=bokking['team_id']
+    acting_email=bokking['acting_email']
+    attendee_emails=bokking['attendee_emails']
+    start=datetime.fromisoformat(bokking['start'])
+    end=datetime.fromisoformat(bokking['end'])
+
+    background_tasks.add_task(handle_book_slot, user_id, team_id, acting_email, attendee_emails, start, end)
+
+    return {"ok": True}
+
+
+
+    
+    
+
+
+    
+
+
+
