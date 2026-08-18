@@ -169,7 +169,7 @@ cadd-scheduler-agent/
 ---
 ## Status
 
-🚧 **Actively building** — Slack slash-command surface accepts natural-language commands end-to-end (`@mention` attendees + spoken meeting times); Strands adopted as the agent framework, orchestrator scaffolded with two tools proven live against real Workspace calendars.
+🚧 **Actively building** — Slack slash-command surface accepts natural-language commands end-to-end (`@mention` attendees + spoken meeting times); Strands adopted as the agent framework; full agent booking pipeline live — orchestrator chains three tools (availability check → free slot finder → meeting creation) against real Workspace calendars with a single `/cadd` command.
 
 **What's working end-to-end today:**
 - AgentCore Identity USER_FEDERATION OAuth flow with session binding
@@ -204,13 +204,17 @@ cadd-scheduler-agent/
 - **Orchestrator agent** — `build_agent(creds)` factory produces per-request Strands `Agent` instances with both tools available; LLM chains the tools end-to-end (get_availability → find_free_slots) via docstring-guided reasoning, no glue code
 - **Verified against real Workspace calendars** — orchestrator correctly detects Ashwin's real busy blocks and proposes non-conflicting 30-minute meeting windows, matching the behavior of the existing hand-wired `/cadd` flow but without any imperative control flow
 - **Existing `webhooks.py` untouched** — Sessions 1–8 code path still ships; agent path lives side-by-side, ready to be feature-flagged in the next session
+- **`create_meeting_tool`** — third Strands tool wrapping `GoogleCalendarProvider.create_meeting`; factory pattern matching `get_availability_tool`; returns `{"join_url", "event_id"}` on success, `{"error": ...}` on failure; docstring guards against speculative booking
+- **Orchestrator wired into `webhooks.py` behind `use_agent` feature flag** — `USE_AGENT=true` routes `/cadd` through the Strands agent; existing hand-wired path untouched and default; agent receives concrete ISO times and resolved emails, not raw text
+- **Full agent booking pipeline verified live** — three-tool chain (get_availability → find_free_slots_tool → create_meeting) correctly detected Ashwin's busy block, found the next free window at or after the requested time, and booked a real Google Meet; confirmed in Google Calendar UI
+
 
 **What's next:**
-- `create_meeting_tool` — third tool wrapping `GoogleCalendarProvider.create_meeting` so the orchestrator can actually book, not just propose
-- Wire orchestrator into `webhooks.py` behind a feature flag, side-by-side with the existing hand-wired flow
-- Remaining agents in the crew: Negotiation, Consensus, Meet, Notifier (built when they have real tools to justify their existence, not before)
-- Step Functions negotiation state machine
-- `login_hint` + `hd` param on auth URL to prevent wrong Google account onboarding
+- Remaining agents in the crew: Negotiation agent (DMs a conflicting attendee 1:1, collects their free windows), Consensus agent (checks a proposed slot works for everyone remaining)
+- Step Functions negotiation state machine — Proposed → Collecting → Renegotiating → Locked, with round caps and organizer escalation
+- `login_hint` + `hd` param on auth URL — prevents wrong Google account during OAuth (deferred since Session 7, low effort, high correctness value)
+- AgentCore Runtime deployment — local Bedrock is enough today; deploy after the multi-agent crew is proven locally
+- `asyncio.to_thread` wrap — Bedrock and Google calls are sync inside async handlers; fix in one pass when it matters
 
 ## Roadmap
 
@@ -241,7 +245,7 @@ cadd-scheduler-agent/
 **Agent crew**
 - [x] Framework decision — Strands (see What's working)
 - [x] Orchestrator agent scaffolded with `get_availability` + `find_free_slots` tools
-- [ ] `create_meeting_tool` + orchestrator wired into `webhooks.py`
+- [x] `create_meeting_tool` + orchestrator wired into `webhooks.py`
 - [ ] Remaining crew members: Negotiation, Consensus, Meet, Notifier
 - [ ] Step Functions negotiation state machine
 - [ ] AgentCore Runtime deployment

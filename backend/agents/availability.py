@@ -82,3 +82,60 @@ def get_availability_tool(creds: Credentials) -> Callable:
     
     return get_availability
 
+def create_meeting_tool(creds:Credentials)->Callable:
+    provider = GoogleCalendarProvider(creds)
+
+    @tool
+    def create_meeting(
+            organizer_id: str,
+            attendee_ids: list[str],
+            start: str,
+            end: str,
+            title: str,
+        ) -> dict[str, str]:
+
+            """Book a Google Meet for a group of people at a specific time.
+            
+                    Use this only after you have confirmed the slot is free for all attendees
+                    using get_availability. Do not call this speculatively — it creates a real
+                    calendar event and sends invites immediately.
+            
+                    Args:
+                        organizer_id: Email of the person who ran the /cadd command.
+                                        The event is created on their calendar.
+                        attendee_ids: List of Google Workspace email addresses to invite.
+                                        Do not include the organizer — Google adds them automatically.
+                        start: Meeting start time, ISO 8601 with timezone offset.
+                            Must be the exact start of the meeting, not the free window.
+                        end: Meeting end time, ISO 8601 with timezone offset.
+                        title: Short human-readable title for the calendar event.
+            
+                    Returns:
+                        On success: {"join_url": "<Google Meet URL>", "event_id": "<calendar event id>"}
+                        On failure: {"error": "<reason>"}
+                        Always check for the "error" key before using the result.
+            """
+            
+            start_dt=datetime.fromisoformat(start)
+            end_dt=datetime.fromisoformat(end)
+
+            try:
+                meeting = provider.create_meeting(
+                        organizer_id=organizer_id,
+                        attendee_ids=attendee_ids,
+                        start=start_dt,
+                        end=end_dt,
+                        title=title,
+                    )
+            except Exception as e:
+                        return  {"error": f"event creation failed: {e}"}
+
+            return {"join_url": meeting.join_url, "event_id":meeting.event_id}
+
+    return create_meeting
+        
+        
+                 
+            
+    
+

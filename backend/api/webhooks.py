@@ -15,6 +15,7 @@ import json
 from backend.core.availability import find_free_slots
 from zoneinfo import ZoneInfo
 from backend.core.logging import get_logger
+from backend.agents.orchestrator import build_agent
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -89,6 +90,22 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     end = parsed.start + timedelta(minutes=parsed.duration_minutes)
 
     logger.info(f"Querying slot: {start} → {end} for {[acting_email] + attendee_emails}")
+    if settings.use_agent:
+        agent = build_agent(creds)
+        result = agent(
+            f"Schedule a {parsed.duration_minutes}-minute meeting.\n"
+            f"Organizer: {acting_email}\n"
+            f"Attendees: {', '.join(attendee_emails)}\n"
+            f"Requested time: {start.isoformat()} to {end.isoformat()}\n"
+            f"Check availability and book if the slot is free. "
+            f"If the slot is busy, find the next free window that starts "
+            f"at or after {start.isoformat()} within working hours "
+            f"(5:30 PM to 2:30 AM IST) and book that instead.")
+        slack_client.chat_postMessage(
+            channel=user_id,
+            text=str(result),
+        )
+        return
 
     start_ist = start.astimezone(ist)
     if start_ist.hour < 3 or (start_ist.hour == 2 and start_ist.minute <= 30):
