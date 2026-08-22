@@ -1,3 +1,13 @@
+"""
+backend/api/main.py
+
+FastAPI application entrypoint.
+
+Wires the Slack webhook router and serves the OAuth callback that completes
+AgentCore's USER_FEDERATION flow. Startup config (logging, clients) lives
+here; request handling lives in webhooks.py.
+"""
+
 import boto3
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse

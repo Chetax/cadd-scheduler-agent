@@ -1,3 +1,15 @@
+"""
+backend/agents/orchestrator.py
+Orchestrator agent factory.
+
+build_agent(creds) constructs a per-request Strands agent. Per-request rather
+than a module singleton because tools close over user-specific Google
+credentials.
+
+The system prompt describes the role, not today's tool list, so adding tools
+doesn't require rewriting it.
+"""
+
 from strands import Agent
 from google.oauth2.credentials import Credentials
 from backend.core.config import settings
