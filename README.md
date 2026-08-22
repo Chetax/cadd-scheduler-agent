@@ -207,6 +207,11 @@ cadd-scheduler-agent/
 - **`create_meeting_tool`** — third Strands tool wrapping `GoogleCalendarProvider.create_meeting`; factory pattern matching `get_availability_tool`; returns `{"join_url", "event_id"}` on success, `{"error": ...}` on failure; docstring guards against speculative booking
 - **Orchestrator wired into `webhooks.py` behind `use_agent` feature flag** — `USE_AGENT=true` routes `/cadd` through the Strands agent; existing hand-wired path untouched and default; agent receives concrete ISO times and resolved emails, not raw text
 - **Full agent booking pipeline verified live** — three-tool chain (get_availability → find_free_slots_tool → create_meeting) correctly detected Ashwin's busy block, found the next free window at or after the requested time, and booked a real Google Meet; confirmed in Google Calendar UI
+- **`OrgProfile` + `Shift` models** — working hours moved out of hardcoded literals into pydantic models; `Shift.working_window()` owns the midnight-crossing arithmetic that was duplicated inline in `webhooks.py`; hours live on `Shift` rather than `OrgProfile` because one org can run several shifts
+- **First unit tests** — `backend/tests/` with pytest, covering `working_window`'s three branches (non-crossing, crossing before midnight, crossing after midnight); previously all testing was manual smoke scripts against live services
+- **Slot buttons book the requested duration** — buttons previously carried the whole free gap as the meeting, so a "12:45 AM–02:30 AM" button booked a 1h45m meeting instead of 30 minutes
+- **Conflict check filtered to the requested window** — restored the interval-overlap test; without it any busy block anywhere in the 9-hour working day flagged a conflict even when the asked-for slot was free
+- **Conflict messages show the date** — time-only formatting made wrong-day bookings invisible
 
 
 **What's next:**
@@ -215,6 +220,7 @@ cadd-scheduler-agent/
 - `login_hint` + `hd` param on auth URL — prevents wrong Google account during OAuth (deferred since Session 7, low effort, high correctness value)
 - AgentCore Runtime deployment — local Bedrock is enough today; deploy after the multi-agent crew is proven locally
 - `asyncio.to_thread` wrap — Bedrock and Google calls are sync inside async handlers; fix in one pass when it matters
+- Relative date resolution moved into Python — Bedrock currently computes "coming monday" itself and gets it wrong; the model should identify the phrase, `OrgProfile` should compute the date
 
 ## Roadmap
 
@@ -240,7 +246,8 @@ cadd-scheduler-agent/
 - [x] `@mention` attendee parsing (replacing hardcoded test attendee)
 - [x] Natural-language meeting time parsing (Bedrock Converse — single time, duration, range; timezone-aware)
 - [x] Conflict detection with free-slot alternatives (working hours scoped)
-- [x] DM-based negotiation cards (pick a time, propose alternative, confirm)
+- [x] Organizer-side slot selection via Block Kit buttons
+- [ ] DM-based negotiation cards (pick a time, propose alternative, confirm)
 
 **Agent crew**
 - [x] Framework decision — Strands (see What's working)
