@@ -1,3 +1,15 @@
+"""
+backend/api/webhooks.py
+
+Slack webhook handlers.
+
+Two routes, both signature-verified: /slack/commands for /cadd, and
+/slack/actions for Block Kit button clicks. Each returns within Slack's
+3-second limit and hands real work to a background task.
+
+process_cadd_command is the main pipeline: resolve user -> parse mentions ->
+parse time -> check availability -> book or offer alternatives.
+"""
 from backend.integrations.dynamodb.user_repository import DynamoDBUserRepository
 from backend.integrations.dynamodb.pending_session_repository import DynamoDBPendingSessionRepository
 from backend.integrations.tokens.agentcore_lookup import AgentCoreUserCredentialsLookup
@@ -8,8 +20,9 @@ from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from backend.core.config import settings
 from backend.integrations.slack.signature_verifier import SlackSignatureVerifier, StaleSlackRequestError, InvalidSlackSignatureError
 from backend.integrations.google_calendar.provider import GoogleCalendarProvider
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, time
 from backend.integrations.bedrock.time_parser import BedrockTimeParser, TimeParseError
+from backend.core.org_profile import OrgProfile, Shift
 import re
 import json
 from backend.core.availability import find_free_slots
@@ -31,6 +44,8 @@ onboarding_service = OnboardingService(
 slack_client = WebClient(token=settings.slack_bot_token)
 user_info_provider = SlackWebClientUserInfoProvider(slack_client)
 time_parser = BedrockTimeParser(settings.bedrock_model_id, settings.aws_region)
+org_profile = OrgProfile(org_id="consultadd", timezone="Asia/Kolkata")
+default_shift = Shift(name="late", work_start=time(17, 30), work_end=time(2, 30))
 
 
 async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
@@ -73,12 +88,11 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
 
     provider = GoogleCalendarProvider(creds)
 
-    timezone_str = "Asia/Kolkata"
-    now = datetime.now(ZoneInfo(timezone_str))
-    ist = ZoneInfo(timezone_str)
+    ist = org_profile.tz()
+    now = datetime.now(ist)
 
     try:
-        parsed = time_parser.parse(text, now=now, timezone=timezone_str)
+        parsed = time_parser.parse(text, now=now, timezone=org_profile.timezone)
     except TimeParseError:
         slack_client.chat_postMessage(
             channel=user_id,
@@ -107,13 +121,7 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
         )
         return
 
-    start_ist = start.astimezone(ist)
-    if start_ist.hour < 3 or (start_ist.hour == 2 and start_ist.minute <= 30):
-        # e.g. 12:00 AM on Aug 14 → working window started Aug 13 5:30 PM
-        query_start = (start_ist - timedelta(days=1)).replace(hour=17, minute=30, second=0, microsecond=0)
-    else:
-        query_start = start_ist.replace(hour=17, minute=30, second=0, microsecond=0)
-    query_end = query_start + timedelta(hours=9)
+    query_start, query_end = default_shift.working_window(start, ist)
 
     busy_by_person = provider.get_availability(
         user_ids=[acting_email] + attendee_emails,
@@ -124,24 +132,18 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     logger.info(f"Busy results: {busy_by_person}")
 
     conflicts = {
-        email: slots
+        email: [s for s in slots if s.start < end and s.end > start]
         for email, slots in busy_by_person.items()
-        if slots
     }
+    conflicts = {e: s for e, s in conflicts.items() if s}
 
     if conflicts:
-        # same midnight-crossing logic as query window above
-        if start_ist.hour < 3 or (start_ist.hour == 2 and start_ist.minute <= 30):
-            work_start = (start_ist - timedelta(days=1)).replace(hour=17, minute=30, second=0, microsecond=0)
-        else:
-            work_start = start_ist.replace(hour=17, minute=30, second=0, microsecond=0)
-        work_end = work_start + timedelta(hours=9)
-        search_start = work_start
+       
 
         free_slots = find_free_slots(
             busy_by_person=busy_by_person,
-            search_start=search_start,
-            search_end=work_end,
+            search_start=query_start,
+            search_end=query_end,
             duration_minutes=parsed.duration_minutes,
         )
 
@@ -166,18 +168,18 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
                     return f"{mins}m"
 
             buttons = []
-            for ind,(slot_start, slot_end) in enumerate(free_slots[:3]):
+            for ind,(slot_start, slot_end) in enumerate(free_slots[:5]):
                 buttons.append({
                     "type":'button',
                     "text":{
                         "type": "plain_text",
-                        "text": f"{slot_start.astimezone(ist).strftime('%I:%M %p')}-{slot_end.astimezone(ist).strftime('%I:%M %p')} {format_duration(slot_start,slot_end)}"
+                        "text": f"{slot_start.astimezone(ist).strftime('%I:%M %p')} ({format_duration(slot_start, slot_end)} free)"
                     },
                     'action_id':f"book_slot_{ind}",
                     'value':json.dumps({"acting_email":acting_email,
                                         'attendee_emails':attendee_emails,
                                         'start':slot_start.isoformat(), 
-                                        'end':slot_end.isoformat(),
+                                        'end':(slot_start + timedelta(minutes=parsed.duration_minutes)).isoformat(),
                                         'team_id':team_id,
                                         'user_id':user_id})
 
@@ -189,7 +191,7 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
                 text=(
                     f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')}\n\n"
                 ),
-                blocks=[{'type':'section','text':{'type': 'mrkdwn', 'text': f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')} — pick a free window:"}},{ 'type':'actions','elements':buttons}]
+                blocks=[{'type':'section','text':{'type': 'mrkdwn', 'text': f"❌ {who} at {start.astimezone(ist).strftime('%a %d %b, %I:%M %p IST')} — pick a free window:"}},{ 'type':'actions','elements':buttons}]
             )
         else:
             slack_client.chat_postMessage(
@@ -242,8 +244,7 @@ async def handle_book_slot(user_id:str, team_id:str, acting_email:str, attendee_
             title="Meeting scheduled via cadd",
         )
 
-    timezone_str = "Asia/Kolkata"
-    ist = ZoneInfo(timezone_str)
+    ist = org_profile.tz()
 
 
     slack_client.chat_postMessage(
