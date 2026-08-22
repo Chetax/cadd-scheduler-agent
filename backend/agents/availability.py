@@ -1,3 +1,17 @@
+"""
+backend/agents/availability.py
+
+Strands tool wrappers for calendar availability and booking.
+
+Adapters only — the real logic lives in core/ and integrations/. Each tool
+unwraps primitives at entry and rewraps at exit, because tool signatures must
+be JSON-expressible for the LLM to call them.
+
+Tools needing per-user credentials are factories: the outer function closes
+over the provider, @tool goes on the inner function so creds stay invisible
+to the model.
+
+"""
 from strands import tool
 from datetime import datetime
 from backend.core.availability import find_free_slots
