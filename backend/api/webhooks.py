@@ -21,7 +21,8 @@ from backend.core.config import settings
 from backend.integrations.slack.signature_verifier import SlackSignatureVerifier, StaleSlackRequestError, InvalidSlackSignatureError
 from backend.integrations.google_calendar.provider import GoogleCalendarProvider
 from datetime import datetime, timedelta, time
-from backend.integrations.bedrock.time_parser import BedrockTimeParser, TimeParseError
+from backend.integrations.bedrock.request_parser import BedrockRequestParser
+from backend.core.request_parser import Intent
 from backend.core.org_profile import OrgProfile, Shift
 import re
 import json
@@ -43,7 +44,7 @@ onboarding_service = OnboardingService(
 )
 slack_client = WebClient(token=settings.slack_bot_token)
 user_info_provider = SlackWebClientUserInfoProvider(slack_client)
-time_parser = BedrockTimeParser(settings.bedrock_model_id, settings.aws_region)
+request_parser = BedrockRequestParser(settings.bedrock_model_id, settings.aws_region)
 org_profile = OrgProfile(org_id="consultadd", timezone="Asia/Kolkata")
 default_shift = Shift(name="late", work_start=time(17, 30), work_end=time(2, 30))
 
@@ -92,14 +93,16 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
     now = datetime.now(ist)
 
     try:
-        parsed = time_parser.parse(text, now=now, timezone=org_profile.timezone)
+        request = request_parser.understand(text, now=now, timezone=org_profile.timezone)
     except TimeParseError:
-        slack_client.chat_postMessage(
-            channel=user_id,
-            text="I couldn't understand that time — try something like 'tomorrow at 3pm'.",
-        )
+        slack_client.chat_postMessage(channel=user_id, text="I couldn't understand that — try something like 'tomorrow at 3pm'.")
         return
 
+    if request.intent == Intent.MY_CALENDAR:
+        slack_client.chat_postMessage(channel=user_id, text="I can't check your own calendar yet — coming soon.")
+        return
+
+    parsed = request.time
     start = parsed.start
     end = parsed.start + timedelta(minutes=parsed.duration_minutes)
 
@@ -198,6 +201,13 @@ async def process_cadd_command(user_id: str, team_id: str, text: str) -> None:
                 channel=user_id,
                 text=f"❌ {who} at {start.astimezone(ist).strftime('%I:%M %p IST')}\n\nNo free slots in working hours.",
             )
+        return
+
+    if request.intent == Intent.CHECK:
+        slack_client.chat_postMessage(
+            channel=user_id,
+            text=f"✅ Everyone's free at {start.astimezone(ist).strftime('%a %d %b, %I:%M %p IST')}.",
+        )
         return
 
     # no conflicts — book it

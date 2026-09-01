@@ -212,6 +212,8 @@ cadd-scheduler-agent/
 - **Slot buttons book the requested duration** — buttons previously carried the whole free gap as the meeting, so a "12:45 AM–02:30 AM" button booked a 1h45m meeting instead of 30 minutes
 - **Conflict check filtered to the requested window** — restored the interval-overlap test; without it any busy block anywhere in the 9-hour working day flagged a conflict even when the asked-for slot was free
 - **Conflict messages show the date** — time-only formatting made wrong-day bookings invisible
+- **`RequestParser` / `Intent` classification** — replaces the single-purpose `BedrockTimeParser` with `BedrockRequestParser`, which classifies every `/cadd` message as `BOOK`, `CHECK`, or `MY_CALENDAR` and resolves a concrete time in the same Converse API call (no added latency or cost over the old time-only parser)
+- **`CHECK` and `MY_CALENDAR` can no longer silently book a meeting** — the root bug this closes: "is @Ankit free at 12?" used to fall through the same pipeline as a real booking request and could create a meeting nobody asked for; both intents now short-circuit before `create_meeting` is ever called
 
 
 **What's next:**
@@ -221,6 +223,8 @@ cadd-scheduler-agent/
 - AgentCore Runtime deployment — local Bedrock is enough today; deploy after the multi-agent crew is proven locally
 - `asyncio.to_thread` wrap — Bedrock and Google calls are sync inside async handlers; fix in one pass when it matters
 - Relative date resolution moved into Python — Bedrock currently computes "coming monday" itself and gets it wrong; the model should identify the phrase, `OrgProfile` should compute the date
+- `CHECK` requests still render Block Kit booking buttons on conflict — intent correctly blocks *automatic* booking, but the UI doesn't yet distinguish "report busy/free" from "offer to book" when a conflict exists
+- Vague-confidence phrases (e.g. "eod") currently return `time=None` instead of a best-effort start — the model conflates "unsure of exact time" with "no time at all"; needs a prompt fix before `resolve_shorthand` can build on it
 
 ## Roadmap
 
@@ -247,6 +251,7 @@ cadd-scheduler-agent/
 - [x] Natural-language meeting time parsing (Bedrock Converse — single time, duration, range; timezone-aware)
 - [x] Conflict detection with free-slot alternatives (working hours scoped)
 - [x] Organizer-side slot selection via Block Kit buttons
+- [x] Intent routing — check vs. schedule (`Intent.BOOK` / `Intent.CHECK` / `Intent.MY_CALENDAR`)
 - [ ] DM-based negotiation cards (pick a time, propose alternative, confirm)
 
 **Agent crew**
